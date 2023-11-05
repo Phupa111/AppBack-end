@@ -10,7 +10,7 @@ const { type } = require('os');
 const pool = mariadb.createPool({
     host: 'localhost',
     user: 'root',
-    password: '418825',
+    password: '1234',
     database: 'sushi', // Replace 'your_database_name' with your actual database name
     connectionLimit: 5
 });
@@ -43,26 +43,21 @@ app.get('/sushi', async (req, res) => {
     }
 });
 
-app.get('/bill/:id', async (req, res) => {
-    const userId = req.params.id; // Capture the user's ID from the URL parameter
-    
+app.post('/user/login', async (req, res) => {
+    const { username, password} = req.body;
     let conn;
-    try {
+    try{
         conn = await pool.getConnection();
-        const rows = await conn.query('SELECT `total_price`, `id`, `uid` FROM `sushi`.`bill` WHERE  `uid` = ?', [userId]);
+        const rows = await conn.query('select id,name,username,password from user where username = ? and password = ?', [username, password])
 
-        // Convert BigInt values to regular numbers
-        const formattedRows = rows.map(row => {
-            return {
-                id: Number(row.id),
-                total_price: row.total_price,
-                uid: Number(row.uid)
-            };
+        const formattedRows = rows.map(row =>{
+            return{
+                id : Number(row.id),
+                name : row.name
+            }
         });
-
-        // Send the response as JSON
         res.status(200).json(formattedRows);
-    } catch (e) {
+    }catch (e) {
         console.error(e);
         res.status(500).json({ error: 'Internal Server Error' });
     } finally {
@@ -73,39 +68,45 @@ app.get('/bill/:id', async (req, res) => {
 });
 
 
-app.post('/bill/insert', async (req, res) => {
-    const { uid } = req.body; // Capture the user ID from the request body
-    console.log(uid);
-    if (uid === undefined || uid === null) {
-        res.status(400).json({ error: 'Invalid user ID' });
-        return;
-    }
-
+app.post('/cart/add/sushi', async(req, res)=>{
+    const {uid,sushi_id,amount,status} = req.body;
     let conn;
-    try {
+    try{
         conn = await pool.getConnection();
-        const result = await conn.query('INSERT INTO `sushi`.`bill` (`total_price`, `uid`) VALUES (0, ?)', [uid]);
-
-        // Send the response as JSON
-        const formattedResult = {
-            id: Number(result.insertId),
-            total_price: 0,
-            uid: Number(uid),
-        };
-        res.status(200).json(formattedResult);
-    } catch (e) {
+        const rows = await conn.query("INSERT INTO `sushi`.`amount_item` (`uid`, `sushi_id`, `amount`, `status`) VALUES (?, ?, ?, ?)",[uid,sushi_id,amount,status]) 
+        res.status(200).send("insert complete")
+    }catch(e){
         console.error(e);
         res.status(500).json({ error: 'Internal Server Error' });
-    } finally {
+    }finally {
         if (conn) {
             conn.release(); // Release the database connection back to the pool
         }
     }
 });
 
-
-
-
-http.createServer(app).listen(1137, () => {
+app.post('/show/cart',async (req,res)=>{
+    const uid = req.body;
+    let conn;
+    try{
+        conn = pool.getConnection();
+        const rows = await conn.query("SELECT sushi.name,sushi.price,amount_item.amount,amount_item.`status`,(sushi.price*amount_item.amount) AS Total FROM amount_item,user,sushi WHERE amount_item.sushi_id = sushi.id AND user.id = amount_item.uid AND amount_item.uid = ?",[uid])
+        
+        const formattedRows = rows.map(row =>{
+            return{
+                "name" : row.name,
+                "price" : row.price,
+                "amount" : row.amount,
+                "status" : row.status,
+                "Total" : row.Total
+            }
+        });
+        res.status(200).json(formattedRows);
+    }catch(e){
+        console.error(e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+http.createServer(app).listen(5000, () => {
     console.log('Express Server started on port 1137');
 });
